@@ -1,0 +1,54 @@
+import { useState, useEffect } from 'react'
+import { Routes, Route, Navigate } from 'react-router-dom'
+import { supabase } from './lib/supabase'
+import ProtectedRoute from './components/ProtectedRoute'
+import Layout from './components/Layout'
+import Login from './pages/Login'
+import Register from './pages/Register'
+import Dashboard from './pages/Dashboard'
+import ChannelDetail from './pages/ChannelDetail'
+import RichMenuEdit from './pages/RichMenuEdit'
+
+function App() {
+  const [session, setSession] = useState(null)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setSession(session)
+      setLoading(false)
+    })
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setSession(session)
+    })
+
+    return () => subscription.unsubscribe()
+  }, [])
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <div className="text-gray-500">載入中...</div>
+      </div>
+    )
+  }
+
+  return (
+    <Routes>
+      <Route path="/login" element={session ? <Navigate to="/dashboard" /> : <Login />} />
+      <Route path="/register" element={session ? <Navigate to="/dashboard" /> : <Register />} />
+      <Route element={<ProtectedRoute session={session} />}>
+        <Route element={<Layout session={session} />}>
+          <Route path="/dashboard" element={<Dashboard session={session} />} />
+          <Route path="/channels/:id" element={<ChannelDetail session={session} />} />
+          <Route path="/channels/:id/richmenu/new" element={<RichMenuEdit session={session} />} />
+          <Route path="/channels/:id/richmenu/:menuId" element={<RichMenuEdit session={session} />} />
+        </Route>
+      </Route>
+      <Route path="*" element={<Navigate to={session ? "/dashboard" : "/login"} />} />
+    </Routes>
+  )
+}
+
+export default App
