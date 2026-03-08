@@ -7,4 +7,10 @@ export const supabaseMissing = !supabaseUrl || !supabaseAnonKey
 
 export const supabase = supabaseMissing
   ? null
-  : createClient(supabaseUrl, supabaseAnonKey)
+  : createClient(supabaseUrl, supabaseAnonKey, {
+      auth: {
+        autoRefreshToken: true,
+        persistSession: true,
+        detectSessionInUrl: true,
+      },
+    })

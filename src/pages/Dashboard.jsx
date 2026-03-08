@@ -30,14 +30,22 @@ export default function Dashboard({ session }) {
     setError('')
     setSaving(true)
 
+    // 重新取得最新 session 確保 JWT 有效
+    const { data: { session: currentSession } } = await supabase.auth.getSession()
+    if (!currentSession) {
+      setError('登入已過期，請重新登入')
+      setSaving(false)
+      return
+    }
+
     const { error } = await supabase.from('channels').insert({
-      user_id: session.user.id,
+      user_id: currentSession.user.id,
       channel_name: channelName,
       channel_access_token: accessToken,
     })
 
     if (error) {
-      setError(error.message)
+      setError(`${error.message} (code: ${error.code}, hint: ${error.hint || 'none'})`)
     } else {
       setChannelName('')
       setAccessToken('')
