@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { Routes, Route, Navigate } from 'react-router-dom'
-import { supabase } from './lib/supabase'
+import { supabase, supabaseMissing } from './lib/supabase'
 import ProtectedRoute from './components/ProtectedRoute'
 import Layout from './components/Layout'
 import Login from './pages/Login'
@@ -25,6 +25,18 @@ function App() {
 
     return () => subscription.unsubscribe()
   }, [])
+
+  if (supabaseMissing) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <div className="text-center p-8">
+          <h1 className="text-2xl font-bold text-red-600 mb-4">設定錯誤</h1>
+          <p className="text-gray-600">缺少環境變數 VITE_SUPABASE_URL 或 VITE_SUPABASE_ANON_KEY</p>
+          <p className="text-gray-500 text-sm mt-2">請在 Netlify 環境變數中設定後重新部署</p>
+        </div>
+      </div>
+    )
+  }
 
   if (loading) {
     return (

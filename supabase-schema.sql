@@ -1,10 +1,11 @@
 -- =============================================
 -- LINE 圖文選單管理系統 - Supabase Schema
 -- 請在 Supabase Dashboard > SQL Editor 中執行此腳本
+-- 可重複執行（已加入 IF NOT EXISTS / DROP IF EXISTS）
 -- =============================================
 
 -- 1. 建立 channels 表
-CREATE TABLE channels (
+CREATE TABLE IF NOT EXISTS channels (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE NOT NULL,
   channel_name TEXT NOT NULL,
@@ -13,7 +14,7 @@ CREATE TABLE channels (
 );
 
 -- 2. 建立 rich_menus 表
-CREATE TABLE rich_menus (
+CREATE TABLE IF NOT EXISTS rich_menus (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   channel_id UUID REFERENCES channels(id) ON DELETE CASCADE NOT NULL,
   line_rich_menu_id TEXT,
@@ -33,7 +34,12 @@ CREATE TABLE rich_menus (
 ALTER TABLE channels ENABLE ROW LEVEL SECURITY;
 ALTER TABLE rich_menus ENABLE ROW LEVEL SECURITY;
 
--- 4. channels RLS policies
+-- 4. channels RLS policies（先移除再建立，確保一致）
+DROP POLICY IF EXISTS "Users can view own channels" ON channels;
+DROP POLICY IF EXISTS "Users can insert own channels" ON channels;
+DROP POLICY IF EXISTS "Users can update own channels" ON channels;
+DROP POLICY IF EXISTS "Users can delete own channels" ON channels;
+
 CREATE POLICY "Users can view own channels"
   ON channels FOR SELECT
   USING (auth.uid() = user_id);
@@ -50,7 +56,12 @@ CREATE POLICY "Users can delete own channels"
   ON channels FOR DELETE
   USING (auth.uid() = user_id);
 
--- 5. rich_menus RLS policies (透過 channel join 確認 user_id)
+-- 5. rich_menus RLS policies（先移除再建立，確保一致）
+DROP POLICY IF EXISTS "Users can view own rich menus" ON rich_menus;
+DROP POLICY IF EXISTS "Users can insert own rich menus" ON rich_menus;
+DROP POLICY IF EXISTS "Users can update own rich menus" ON rich_menus;
+DROP POLICY IF EXISTS "Users can delete own rich menus" ON rich_menus;
+
 CREATE POLICY "Users can view own rich menus"
   ON rich_menus FOR SELECT
   USING (
@@ -100,6 +111,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+DROP TRIGGER IF EXISTS rich_menus_updated_at ON rich_menus;
 CREATE TRIGGER rich_menus_updated_at
   BEFORE UPDATE ON rich_menus
   FOR EACH ROW
