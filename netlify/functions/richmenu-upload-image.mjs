@@ -1,11 +1,15 @@
 import { createClient } from '@supabase/supabase-js'
 
-function getAuthClient(token) {
-  return createClient(
-    process.env.VITE_SUPABASE_URL,
-    process.env.VITE_SUPABASE_ANON_KEY,
-    { global: { headers: { Authorization: `Bearer ${token}` } } }
-  )
+const supabaseAdmin = createClient(
+  process.env.VITE_SUPABASE_URL,
+  process.env.SUPABASE_SERVICE_ROLE_KEY
+)
+
+async function getUser(req) {
+  const token = (req.headers.get('authorization') || '').replace('Bearer ', '')
+  if (!token) return null
+  const { data: { user }, error } = await supabaseAdmin.auth.getUser(token)
+  return error ? null : user
 }
 
 export default async (req) => {
@@ -13,27 +17,23 @@ export default async (req) => {
     return new Response(JSON.stringify({ error: 'Method not allowed' }), { status: 405 })
   }
 
-  const token = (req.headers.get('authorization') || '').replace('Bearer ', '')
-  if (!token) return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401 })
-
-  const client = getAuthClient(token)
-  const { data: { user }, error: authError } = await client.auth.getUser(token)
-  if (authError || !user) return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401 })
+  const user = await getUser(req)
+  if (!user) return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401 })
 
   const body = await req.json()
   const { channelId, menuId } = body
 
-  // Get channel
-  const { data: channel } = await client
+  const { data: channel } = await supabaseAdmin
     .from('channels')
-    .select('channel_access_token')
+    .select('channel_access_token, user_id')
     .eq('id', channelId)
     .single()
 
-  if (!channel) return new Response(JSON.stringify({ error: 'Channel not found' }), { status: 404 })
+  if (!channel || channel.user_id !== user.id) {
+    return new Response(JSON.stringify({ error: 'Channel not found' }), { status: 404 })
+  }
 
-  // Get menu to find image path and LINE rich menu ID
-  const { data: menu } = await client
+  const { data: menu } = await supabaseAdmin
     .from('rich_menus')
     .select('*')
     .eq('id', menuId)
@@ -47,8 +47,7 @@ export default async (req) => {
     return new Response(JSON.stringify({ error: 'No image uploaded' }), { status: 400 })
   }
 
-  // Download image from Supabase Storage
-  const { data: imageData, error: dlError } = await client.storage
+  const { data: imageData, error: dlError } = await supabaseAdmin.storage
     .from('richmenu-images')
     .download(menu.image_path)
 
@@ -59,7 +58,6 @@ export default async (req) => {
   const imageBuffer = await imageData.arrayBuffer()
   const contentType = menu.image_path.endsWith('.png') ? 'image/png' : 'image/jpeg'
 
-  // Upload image to LINE API
   const lineRes = await fetch(
     `https://api-data.line.me/v2/bot/richmenu/${menu.line_rich_menu_id}/content`,
     {

@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
+import { apiFetch } from '../lib/api'
 import AreaSelector from './AreaSelector'
 import ActionConfig from './ActionConfig'
 
@@ -80,20 +81,14 @@ export default function RichMenuEditor({ menu, channelId, session, onSave }) {
         areas,
       }
 
-      if (menu?.id) {
-        // Update existing
-        const { error } = await supabase
-          .from('rich_menus')
-          .update(menuData)
-          .eq('id', menu.id)
-        if (error) throw error
-      } else {
-        // Create new
-        const { error } = await supabase
-          .from('rich_menus')
-          .insert(menuData)
-        if (error) throw error
-      }
+      // Save via Netlify Function (bypasses RLS)
+      await apiFetch('/.netlify/functions/menus', {
+        method: 'POST',
+        body: JSON.stringify({
+          menuId: menu?.id || null,
+          menuData,
+        }),
+      })
 
       onSave()
     } catch (err) {

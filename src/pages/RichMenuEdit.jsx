@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
-import { supabase } from '../lib/supabase'
+import { apiFetch } from '../lib/api'
 import RichMenuEditor from '../components/RichMenuEditor'
 
 export default function RichMenuEdit({ session }) {
@@ -12,22 +12,17 @@ export default function RichMenuEdit({ session }) {
 
   useEffect(() => {
     const fetchData = async () => {
-      // Fetch channel info
-      const { data: channelData } = await supabase
-        .from('channels')
-        .select('*')
-        .eq('id', channelId)
-        .single()
-      setChannel(channelData)
+      try {
+        const channels = await apiFetch('/.netlify/functions/channels')
+        const ch = channels.find((c) => c.id === channelId)
+        setChannel(ch || null)
 
-      // Fetch menu if editing existing
-      if (menuId) {
-        const { data: menuData } = await supabase
-          .from('rich_menus')
-          .select('*')
-          .eq('id', menuId)
-          .single()
-        setMenu(menuData)
+        if (menuId) {
+          const menuData = await apiFetch(`/.netlify/functions/menus?channelId=${channelId}&menuId=${menuId}`)
+          setMenu(menuData)
+        }
+      } catch (err) {
+        console.error('Failed to fetch data:', err)
       }
       setLoading(false)
     }

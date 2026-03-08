@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
-import { supabase } from '../lib/supabase'
+import { apiFetch } from '../lib/api'
 
-export default function Dashboard({ session }) {
+export default function Dashboard() {
   const [channels, setChannels] = useState([])
   const [loading, setLoading] = useState(true)
   const [showModal, setShowModal] = useState(false)
@@ -16,12 +16,12 @@ export default function Dashboard({ session }) {
   }, [])
 
   const fetchChannels = async () => {
-    const { data, error } = await supabase
-      .from('channels')
-      .select('*')
-      .order('created_at', { ascending: false })
-
-    if (!error) setChannels(data || [])
+    try {
+      const data = await apiFetch('/.netlify/functions/channels')
+      setChannels(data || [])
+    } catch (err) {
+      console.error('Failed to fetch channels:', err)
+    }
     setLoading(false)
   }
 
@@ -30,35 +30,32 @@ export default function Dashboard({ session }) {
     setError('')
     setSaving(true)
 
-    // 重新取得最新 session 確保 JWT 有效
-    const { data: { session: currentSession } } = await supabase.auth.getSession()
-    if (!currentSession) {
-      setError('登入已過期，請重新登入')
-      setSaving(false)
-      return
-    }
-
-    const { error } = await supabase.from('channels').insert({
-      user_id: currentSession.user.id,
-      channel_name: channelName,
-      channel_access_token: accessToken,
-    })
-
-    if (error) {
-      setError(`${error.message} (code: ${error.code}, hint: ${error.hint || 'none'})`)
-    } else {
+    try {
+      await apiFetch('/.netlify/functions/channels', {
+        method: 'POST',
+        body: JSON.stringify({
+          channel_name: channelName,
+          channel_access_token: accessToken,
+        }),
+      })
       setChannelName('')
       setAccessToken('')
       setShowModal(false)
       fetchChannels()
+    } catch (err) {
+      setError(err.message)
     }
     setSaving(false)
   }
 
   const handleDeleteChannel = async (id) => {
     if (!confirm('確定要刪除此頻道？相關的圖文選單也會一併刪除。')) return
-    await supabase.from('channels').delete().eq('id', id)
-    fetchChannels()
+    try {
+      await apiFetch(`/.netlify/functions/channels?id=${id}`, { method: 'DELETE' })
+      fetchChannels()
+    } catch (err) {
+      setError(err.message)
+    }
   }
 
   if (loading) {
@@ -76,6 +73,12 @@ export default function Dashboard({ session }) {
           + 新增頻道
         </button>
       </div>
+
+      {error && (
+        <div className="mb-4 p-3 bg-red-50 border border-red-200 text-red-700 rounded-md text-sm">
+          {error}
+        </div>
+      )}
 
       {channels.length === 0 ? (
         <div className="text-center py-16 bg-white rounded-lg border border-gray-200">

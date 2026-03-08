@@ -1,13 +1,14 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
+import { apiFetch } from '../lib/api'
 
 const STATUS_LABELS = {
   draft: { text: '草稿', className: 'bg-gray-100 text-gray-700' },
   published: { text: '已發布', className: 'bg-green-100 text-green-700' },
 }
 
-export default function ChannelDetail({ session }) {
+export default function ChannelDetail() {
   const { id: channelId } = useParams()
   const [channel, setChannel] = useState(null)
   const [menus, setMenus] = useState([])
@@ -16,19 +17,16 @@ export default function ChannelDetail({ session }) {
   const [error, setError] = useState('')
 
   const fetchData = useCallback(async () => {
-    const { data: ch } = await supabase
-      .from('channels')
-      .select('*')
-      .eq('id', channelId)
-      .single()
-    setChannel(ch)
+    try {
+      const channels = await apiFetch('/.netlify/functions/channels')
+      const ch = channels.find((c) => c.id === channelId)
+      setChannel(ch || null)
 
-    const { data: menuData } = await supabase
-      .from('rich_menus')
-      .select('*')
-      .eq('channel_id', channelId)
-      .order('created_at', { ascending: false })
-    setMenus(menuData || [])
+      const menuData = await apiFetch(`/.netlify/functions/menus?channelId=${channelId}`)
+      setMenus(menuData || [])
+    } catch (err) {
+      console.error('Failed to fetch data:', err)
+    }
     setLoading(false)
   }, [channelId])
 
@@ -36,36 +34,21 @@ export default function ChannelDetail({ session }) {
     fetchData()
   }, [fetchData])
 
-  const getAuthHeaders = async () => {
-    const { data: { session: s } } = await supabase.auth.getSession()
-    return { Authorization: `Bearer ${s.access_token}`, 'Content-Type': 'application/json' }
-  }
-
   const handlePublish = async (menu) => {
     setError('')
     setActionLoading(menu.id)
 
     try {
-      const headers = await getAuthHeaders()
-
-      // Step 1: Create rich menu on LINE
-      const createRes = await fetch('/.netlify/functions/richmenu-create', {
+      await apiFetch('/.netlify/functions/richmenu-create', {
         method: 'POST',
-        headers,
         body: JSON.stringify({ channelId, menuId: menu.id }),
       })
-      const createData = await createRes.json()
-      if (!createRes.ok) throw new Error(createData.error + (createData.details ? `: ${createData.details}` : ''))
 
-      // Step 2: Upload image to LINE
       if (menu.image_path) {
-        const uploadRes = await fetch('/.netlify/functions/richmenu-upload-image', {
+        await apiFetch('/.netlify/functions/richmenu-upload-image', {
           method: 'POST',
-          headers,
           body: JSON.stringify({ channelId, menuId: menu.id }),
         })
-        const uploadData = await uploadRes.json()
-        if (!uploadRes.ok) throw new Error(uploadData.error + (uploadData.details ? `: ${uploadData.details}` : ''))
       }
 
       fetchData()
@@ -80,14 +63,10 @@ export default function ChannelDetail({ session }) {
     setActionLoading(menu.id)
 
     try {
-      const headers = await getAuthHeaders()
-      const res = await fetch('/.netlify/functions/richmenu-set-default', {
+      await apiFetch('/.netlify/functions/richmenu-set-default', {
         method: 'POST',
-        headers,
         body: JSON.stringify({ channelId, menuId: menu.id }),
       })
-      const data = await res.json()
-      if (!res.ok) throw new Error(data.error)
       fetchData()
     } catch (err) {
       setError(`設定預設失敗：${err.message}`)
@@ -101,14 +80,10 @@ export default function ChannelDetail({ session }) {
     setActionLoading(menu.id)
 
     try {
-      const headers = await getAuthHeaders()
-      const res = await fetch('/.netlify/functions/richmenu-delete', {
+      await apiFetch('/.netlify/functions/richmenu-delete', {
         method: 'POST',
-        headers,
         body: JSON.stringify({ channelId, menuId: menu.id }),
       })
-      const data = await res.json()
-      if (!res.ok) throw new Error(data.error)
       fetchData()
     } catch (err) {
       setError(`刪除失敗：${err.message}`)
@@ -173,7 +148,6 @@ export default function ChannelDetail({ session }) {
 
             return (
               <div key={menu.id} className="bg-white rounded-lg border border-gray-200 overflow-hidden hover:shadow-md transition-shadow">
-                {/* Image Preview */}
                 <div className="aspect-[2500/1686] bg-gray-100 relative">
                   {imageUrl ? (
                     <img src={imageUrl} alt={menu.name} className="w-full h-full object-cover" />

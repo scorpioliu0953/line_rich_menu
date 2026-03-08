@@ -52,8 +52,8 @@ function App() {
       <Route path="/register" element={session ? <Navigate to="/dashboard" /> : <Register />} />
       <Route element={<ProtectedRoute session={session} />}>
         <Route element={<Layout session={session} />}>
-          <Route path="/dashboard" element={<Dashboard session={session} />} />
-          <Route path="/channels/:id" element={<ChannelDetail session={session} />} />
+          <Route path="/dashboard" element={<Dashboard />} />
+          <Route path="/channels/:id" element={<ChannelDetail />} />
           <Route path="/channels/:id/richmenu/new" element={<RichMenuEdit session={session} />} />
           <Route path="/channels/:id/richmenu/:menuId" element={<RichMenuEdit session={session} />} />
         </Route>

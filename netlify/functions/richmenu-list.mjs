@@ -1,11 +1,15 @@
 import { createClient } from '@supabase/supabase-js'
 
-function getAuthClient(token) {
-  return createClient(
-    process.env.VITE_SUPABASE_URL,
-    process.env.VITE_SUPABASE_ANON_KEY,
-    { global: { headers: { Authorization: `Bearer ${token}` } } }
-  )
+const supabaseAdmin = createClient(
+  process.env.VITE_SUPABASE_URL,
+  process.env.SUPABASE_SERVICE_ROLE_KEY
+)
+
+async function getUser(req) {
+  const token = (req.headers.get('authorization') || '').replace('Bearer ', '')
+  if (!token) return null
+  const { data: { user }, error } = await supabaseAdmin.auth.getUser(token)
+  return error ? null : user
 }
 
 export default async (req) => {
@@ -13,29 +17,23 @@ export default async (req) => {
     return new Response(JSON.stringify({ error: 'Method not allowed' }), { status: 405 })
   }
 
-  const token = (req.headers.get('authorization') || '').replace('Bearer ', '')
-  if (!token) return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401 })
-
-  const client = getAuthClient(token)
-  const { data: { user }, error: authError } = await client.auth.getUser(token)
-  if (authError || !user) return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401 })
+  const user = await getUser(req)
+  if (!user) return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401 })
 
   const url = new URL(req.url)
   const channelId = url.searchParams.get('channelId')
   if (!channelId) return new Response(JSON.stringify({ error: 'Missing channelId' }), { status: 400 })
 
-  // Get channel access token
-  const { data: channel, error: chError } = await client
+  const { data: channel } = await supabaseAdmin
     .from('channels')
-    .select('channel_access_token')
+    .select('channel_access_token, user_id')
     .eq('id', channelId)
     .single()
 
-  if (chError || !channel) {
+  if (!channel || channel.user_id !== user.id) {
     return new Response(JSON.stringify({ error: 'Channel not found' }), { status: 404 })
   }
 
-  // Fetch rich menus from LINE API
   const lineRes = await fetch('https://api.line.me/v2/bot/richmenu/list', {
     headers: { Authorization: `Bearer ${channel.channel_access_token}` },
   })
@@ -47,7 +45,6 @@ export default async (req) => {
 
   const data = await lineRes.json()
 
-  // Also get the default rich menu ID
   let defaultRichMenuId = null
   const defaultRes = await fetch('https://api.line.me/v2/bot/user/all/richmenu', {
     headers: { Authorization: `Bearer ${channel.channel_access_token}` },

@@ -1,11 +1,15 @@
 import { createClient } from '@supabase/supabase-js'
 
-function getAuthClient(token) {
-  return createClient(
-    process.env.VITE_SUPABASE_URL,
-    process.env.VITE_SUPABASE_ANON_KEY,
-    { global: { headers: { Authorization: `Bearer ${token}` } } }
-  )
+const supabaseAdmin = createClient(
+  process.env.VITE_SUPABASE_URL,
+  process.env.SUPABASE_SERVICE_ROLE_KEY
+)
+
+async function getUser(req) {
+  const token = (req.headers.get('authorization') || '').replace('Bearer ', '')
+  if (!token) return null
+  const { data: { user }, error } = await supabaseAdmin.auth.getUser(token)
+  return error ? null : user
 }
 
 export default async (req) => {
@@ -13,27 +17,23 @@ export default async (req) => {
     return new Response(JSON.stringify({ error: 'Method not allowed' }), { status: 405 })
   }
 
-  const token = (req.headers.get('authorization') || '').replace('Bearer ', '')
-  if (!token) return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401 })
-
-  const client = getAuthClient(token)
-  const { data: { user }, error: authError } = await client.auth.getUser(token)
-  if (authError || !user) return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401 })
+  const user = await getUser(req)
+  if (!user) return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401 })
 
   const body = await req.json()
   const { channelId, menuId } = body
 
-  // Get channel
-  const { data: channel } = await client
+  const { data: channel } = await supabaseAdmin
     .from('channels')
-    .select('channel_access_token')
+    .select('channel_access_token, user_id')
     .eq('id', channelId)
     .single()
 
-  if (!channel) return new Response(JSON.stringify({ error: 'Channel not found' }), { status: 404 })
+  if (!channel || channel.user_id !== user.id) {
+    return new Response(JSON.stringify({ error: 'Channel not found' }), { status: 404 })
+  }
 
-  // Get menu
-  const { data: menu } = await client
+  const { data: menu } = await supabaseAdmin
     .from('rich_menus')
     .select('line_rich_menu_id, channel_id')
     .eq('id', menuId)
@@ -43,7 +43,6 @@ export default async (req) => {
     return new Response(JSON.stringify({ error: 'Menu not published to LINE' }), { status: 400 })
   }
 
-  // Set as default on LINE
   const lineRes = await fetch(
     `https://api.line.me/v2/bot/user/all/richmenu/${menu.line_rich_menu_id}`,
     {
@@ -57,13 +56,12 @@ export default async (req) => {
     return new Response(JSON.stringify({ error: 'LINE API error', details: errBody }), { status: lineRes.status })
   }
 
-  // Update local DB: reset all menus for this channel, then set this one
-  await client
+  await supabaseAdmin
     .from('rich_menus')
     .update({ is_default: false })
     .eq('channel_id', menu.channel_id)
 
-  await client
+  await supabaseAdmin
     .from('rich_menus')
     .update({ is_default: true })
     .eq('id', menuId)
