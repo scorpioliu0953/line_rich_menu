@@ -13,6 +13,12 @@ async function getUser(req) {
 }
 
 export default async (req) => {
+  if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
+    return new Response(JSON.stringify({
+      error: '伺服器缺少 SUPABASE_SERVICE_ROLE_KEY 環境變數，請在 Netlify 設定'
+    }), { status: 500 })
+  }
+
   const user = await getUser(req)
   if (!user) {
     return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401 })
