@@ -31,9 +31,16 @@
 npm install
 ```
 
-### 2. 設定環境變數
+### 2. 設定 Supabase
 
-複製 `.env.example` 為 `.env`，填入你的 Supabase 設定：
+1. 到 [Supabase Dashboard](https://supabase.com/dashboard) 建立專案
+2. 在 **SQL Editor** 中執行 `supabase-schema.sql`（會自動建立資料表、trigger、Storage bucket）
+
+### 3. 設定環境變數
+
+#### 本地開發
+
+複製 `.env.example` 為 `.env`，填入 Supabase 設定：
 
 ```bash
 cp .env.example .env
@@ -44,17 +51,20 @@ VITE_SUPABASE_URL=https://your-project.supabase.co
 VITE_SUPABASE_ANON_KEY=your-anon-key
 ```
 
-### 3. 設定 Supabase
+#### Netlify 部署
 
-1. 到 [Supabase Dashboard](https://supabase.com/dashboard) 建立專案
-2. 在 SQL Editor 中執行 `supabase-schema.sql` 建立資料表和 RLS policies
-3. 在 Storage 中建立 `richmenu-images` bucket（設為 private）
-4. 為 Storage bucket 設定存取 policies（詳見 `supabase-schema.sql` 中的說明）
+在 Netlify **Site settings > Environment variables** 中設定以下三個變數：
+
+| 變數名稱 | 來源 | 說明 |
+|----------|------|------|
+| `VITE_SUPABASE_URL` | Supabase > Project Settings > API > Project URL | Supabase 專案網址 |
+| `VITE_SUPABASE_ANON_KEY` | Supabase > Project Settings > API > anon public | 前端用的公開金鑰 |
+| `SUPABASE_SERVICE_ROLE_KEY` | Supabase > Project Settings > API > service_role | 後端 Functions 用的管理金鑰（**勿加 `VITE_` 前綴**） |
 
 ### 4. 啟動開發伺服器
 
 ```bash
-# 如果已安裝 Netlify CLI
+# 使用 Netlify CLI（推薦，支援 Functions）
 netlify dev
 
 # 或只啟動前端
@@ -65,39 +75,56 @@ npm run dev
 
 1. 將專案推送到 GitHub
 2. 在 Netlify 連結 GitHub repo
-3. 在 Netlify 環境變數中設定 `VITE_SUPABASE_URL` 和 `VITE_SUPABASE_ANON_KEY`
+3. 設定上述三個環境變數
 4. 部署完成！
 
 ## 專案結構
 
 ```
-├── netlify/functions/          # Netlify serverless functions
-│   ├── channels.mjs            # 頻道 CRUD
-│   ├── richmenu-list.mjs       # 從 LINE API 取得選單列表
-│   ├── richmenu-create.mjs     # 建立選單到 LINE API
-│   ├── richmenu-upload-image.mjs # 上傳圖片到 LINE API
-│   ├── richmenu-set-default.mjs  # 設定預設選單
-│   └── richmenu-delete.mjs     # 刪除選單
+├── netlify/functions/              # Netlify serverless functions
+│   ├── channels.mjs                # 頻道 CRUD
+│   ├── menus.mjs                   # 圖文選單 CRUD（本地 DB）
+│   ├── richmenu-create.mjs         # 建立選單到 LINE API
+│   ├── richmenu-upload-image.mjs   # 上傳選單圖片到 LINE API
+│   ├── richmenu-list.mjs           # 從 LINE API 取得選單列表
+│   ├── richmenu-set-default.mjs    # 設定預設選單
+│   ├── richmenu-delete.mjs         # 刪除選單
+│   └── storage-upload.mjs          # 上傳圖片到 Supabase Storage
 ├── src/
 │   ├── components/
-│   │   ├── Layout.jsx          # 共用版面
-│   │   ├── ProtectedRoute.jsx  # 登入保護
-│   │   ├── RichMenuEditor.jsx  # 圖文選單編輯器
-│   │   ├── AreaSelector.jsx    # 點擊區域視覺化選取
-│   │   └── ActionConfig.jsx    # 區域動作設定
+│   │   ├── Layout.jsx              # 共用版面（header + 登出）
+│   │   ├── ProtectedRoute.jsx      # 登入保護
+│   │   ├── RichMenuEditor.jsx      # 圖文選單編輯器
+│   │   ├── AreaSelector.jsx        # 點擊區域視覺化選取
+│   │   └── ActionConfig.jsx        # 區域動作設定
 │   ├── pages/
-│   │   ├── Login.jsx           # 登入頁
-│   │   ├── Register.jsx        # 註冊頁
-│   │   ├── Dashboard.jsx       # 頻道列表
-│   │   ├── ChannelDetail.jsx   # 頻道詳情 / 選單列表
-│   │   └── RichMenuEdit.jsx    # 建立 / 編輯圖文選單
-│   ├── lib/supabase.js         # Supabase client
-│   ├── App.jsx                 # 路由設定
-│   └── main.jsx                # 入口
-├── supabase-schema.sql         # 資料庫 schema
-├── netlify.toml                # Netlify 設定
-└── .env.example                # 環境變數範本
+│   │   ├── Login.jsx               # 登入頁
+│   │   ├── Register.jsx            # 註冊頁
+│   │   ├── Dashboard.jsx           # 頻道列表
+│   │   ├── ChannelDetail.jsx       # 頻道詳情 / 選單列表
+│   │   └── RichMenuEdit.jsx        # 建立 / 編輯圖文選單
+│   ├── lib/
+│   │   ├── supabase.js             # Supabase client 初始化
+│   │   └── api.js                  # API 呼叫工具（自動帶 JWT）
+│   ├── App.jsx                     # 路由設定
+│   └── main.jsx                    # 入口
+├── supabase-schema.sql             # 資料庫 schema + Storage bucket
+├── netlify.toml                    # Netlify 部署設定
+└── .env.example                    # 環境變數範本
 ```
+
+## 架構說明
+
+所有資料庫與 Storage 操作皆透過 **Netlify Functions** 以 `service_role` key 執行，前端不直接操作 Supabase 資料庫。
+
+```
+瀏覽器 → Netlify Function（驗證 JWT + 操作 DB）→ Supabase
+                                                  → LINE API
+```
+
+- **認證**：前端使用 Supabase Auth 登入，取得 JWT
+- **資料操作**：前端呼叫 Netlify Function，Function 驗證 JWT 後以 service_role key 操作資料庫
+- **LINE API**：Channel Access Token 僅在 server-side 使用，不暴露於前端
 
 ## 使用流程
 
