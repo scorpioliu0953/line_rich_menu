@@ -57,17 +57,25 @@ export default function RichMenuEditor({ menu, channelId, session, onSave }) {
     try {
       let imagePath = menu?.image_path || null
 
-      // Upload image if new file selected
+      // Upload image via Netlify Function
       if (imageFile) {
         const menuId = menu?.id || crypto.randomUUID()
         const ext = imageFile.name.split('.').pop()
         const path = `${session.user.id}/${menuId}.${ext}`
 
-        const { error: uploadError } = await supabase.storage
-          .from('richmenu-images')
-          .upload(path, imageFile, { upsert: true })
-
-        if (uploadError) throw uploadError
+        const { data: { session: s } } = await supabase.auth.getSession()
+        const uploadRes = await fetch(`/.netlify/functions/storage-upload?path=${encodeURIComponent(path)}`, {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${s.access_token}`,
+            'Content-Type': imageFile.type,
+          },
+          body: imageFile,
+        })
+        if (!uploadRes.ok) {
+          const errData = await uploadRes.json()
+          throw new Error(errData.error || '圖片上傳失敗')
+        }
         imagePath = path
       }
 
