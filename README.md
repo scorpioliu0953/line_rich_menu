@@ -10,6 +10,7 @@
 - 預設佈局模板：2 欄、3 欄、2x2、3x2、1 上 + 2 下
 - 動作類型支援：開啟網址 (URI)、發送訊息 (Message)、Postback
 - 草稿 / 發布流程：先在本地儲存草稿，確認後一鍵發布到 LINE
+- 自動更新發布：編輯已發布的選單儲存後，自動同步更新到 LINE（無需手動重新發布）
 - 預設選單管理：可設定哪個選單為所有使用者的預設選單
 
 ## 技術架構
@@ -49,7 +50,10 @@ cp .env.example .env
 ```env
 VITE_SUPABASE_URL=https://your-project.supabase.co
 VITE_SUPABASE_ANON_KEY=your-anon-key
+SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
 ```
+
+> **注意**：`SUPABASE_SERVICE_ROLE_KEY` 不加 `VITE_` 前綴，僅供 Netlify Functions 後端使用，不會暴露於前端。本地開發使用 `netlify dev` 時需要此金鑰才能正常操作資料庫與 Storage。
 
 #### Netlify 部署
 
@@ -135,6 +139,7 @@ npm run dev
 5. 儲存草稿
 6. 點擊「發布到 LINE」→ 系統自動建立選單 + 上傳圖片
 7. 設為預設選單（所有使用者都會看到）
+8. 後續編輯已發布的選單 → 儲存時自動更新到 LINE（刪除舊選單、建立新選單、重新上傳圖片，若為預設選單也會自動恢復）
 
 ## LINE Channel Access Token 取得方式
 
