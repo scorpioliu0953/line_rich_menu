@@ -41,6 +41,22 @@ export default async (req) => {
 
   if (!menu) return new Response(JSON.stringify({ error: 'Menu not found' }), { status: 404 })
 
+  // If this menu was already published, delete the old one from LINE first
+  if (menu.line_rich_menu_id) {
+    const delRes = await fetch(
+      `https://api.line.me/v2/bot/richmenu/${menu.line_rich_menu_id}`,
+      {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${channel.channel_access_token}` },
+      }
+    )
+    // Ignore 404 (already deleted), but fail on other errors
+    if (!delRes.ok && delRes.status !== 404) {
+      const errBody = await delRes.text()
+      return new Response(JSON.stringify({ error: 'Failed to delete old LINE menu', details: errBody }), { status: delRes.status })
+    }
+  }
+
   const lineBody = {
     size: { width: 2500, height: menu.size_height },
     selected: menu.selected,

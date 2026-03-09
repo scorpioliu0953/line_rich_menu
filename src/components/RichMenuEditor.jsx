@@ -90,13 +90,38 @@ export default function RichMenuEditor({ menu, channelId, session, onSave }) {
       }
 
       // Save via Netlify Function (bypasses RLS)
-      await apiFetch('/.netlify/functions/menus', {
+      const savedMenu = await apiFetch('/.netlify/functions/menus', {
         method: 'POST',
         body: JSON.stringify({
           menuId: menu?.id || null,
           menuData,
         }),
       })
+
+      // Auto-republish if menu was already published to LINE
+      if (menu?.status === 'published' && menu?.line_rich_menu_id) {
+        // Re-create rich menu on LINE (old one is deleted automatically)
+        await apiFetch('/.netlify/functions/richmenu-create', {
+          method: 'POST',
+          body: JSON.stringify({ channelId, menuId: savedMenu.id }),
+        })
+
+        // Re-upload image to LINE
+        if (savedMenu.image_path) {
+          await apiFetch('/.netlify/functions/richmenu-upload-image', {
+            method: 'POST',
+            body: JSON.stringify({ channelId, menuId: savedMenu.id }),
+          })
+        }
+
+        // Re-set as default if it was the default menu
+        if (menu.is_default) {
+          await apiFetch('/.netlify/functions/richmenu-set-default', {
+            method: 'POST',
+            body: JSON.stringify({ channelId, menuId: savedMenu.id }),
+          })
+        }
+      }
 
       onSave()
     } catch (err) {
@@ -222,7 +247,9 @@ export default function RichMenuEditor({ menu, channelId, session, onSave }) {
           disabled={saving}
           className="px-6 py-2.5 bg-green-600 text-white rounded-md hover:bg-green-700 disabled:opacity-50 cursor-pointer font-medium"
         >
-          {saving ? '儲存中...' : '儲存草稿'}
+          {saving
+            ? (menu?.status === 'published' ? '儲存並更新至 LINE 中...' : '儲存中...')
+            : (menu?.status === 'published' ? '儲存並更新至 LINE' : '儲存草稿')}
         </button>
       </div>
     </div>
